@@ -6,6 +6,14 @@ import { GoogleGenAI, Type } from "@google/genai";
 
 dotenv.config();
 
+// Prevent server process from crashing and failing to respond with JSON.
+process.on("uncaughtException", (err) => {
+  console.error("GLOBAL UNCAUGHT EXCEPTION:", err);
+});
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("GLOBAL UNHANDLED REJECTION AT:", promise, "REASON:", reason);
+});
+
 const app = express();
 const PORT = 3000;
 
@@ -83,6 +91,17 @@ app.post("/api/verify-key", async (req, res) => {
     let detailedMsg = "유효하지 않은 API Key이거나 네트워크에 장애가 발생했습니다.";
     if (error?.message) {
       detailedMsg = error.message;
+      try {
+        const jsonMatch = error.message.match(/({[\s\S]*})/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[1]);
+          if (parsed?.error?.message) {
+            detailedMsg = parsed.error.message;
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
     }
     return res.status(400).json({ valid: false, error: detailedMsg });
   }

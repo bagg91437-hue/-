@@ -184,7 +184,14 @@ export default function App() {
         body: JSON.stringify({ apiKey: trimmed })
       });
 
-      const data = await response.json();
+      const text = await response.text();
+      let data: any;
+      try {
+        data = JSON.parse(text);
+      } catch (jsonErr) {
+        throw new Error(`서버 응답을 JSON으로 파싱할 수 없습니다. (상태 코드: ${response.status}). 응답 일부: ${text.substring(0, 200)}`);
+      }
+
       if (!response.ok || !data.valid) {
         throw new Error(data.error || "API Key가 유효하지 않습니다.");
       }
