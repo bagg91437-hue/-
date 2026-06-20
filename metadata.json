@@ -1,0 +1,6 @@
+{
+  "name": "고용센터 초기상담 보조 AI",
+  "description": "국민취업지원제도·구직자도약패키지·심리안정프로그램·직업훈련 연계 및 유형 분류를 돕는 직업상담사 보조용 AI 어시스턴트",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
