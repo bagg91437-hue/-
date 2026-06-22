@@ -1065,11 +1065,71 @@ export default function App() {
 
       {/* 2. Top Banner alert for missing API keys */}
       {!diagnostics.hasApiKey && (
-        <div className="no-print bg-amber-500/10 border border-amber-300 text-amber-900 p-4 text-center rounded-3xl text-xs flex items-center justify-center gap-2 max-w-7xl mx-auto w-full mb-6">
-          <AlertCircle size={15} className="text-amber-600 flex-shrink-0" />
-          <span>
-            현재 <strong>GEMINI_API_KEY</strong> 환경 변수를 감지하지 못했습니다. AI 위탁 분석 결과를 도출하기 위해서는 우측 상단의 <strong>Settings &gt; Secrets</strong>에서 등록하십시오.
-          </span>
+        <div className="no-print bg-amber-500/10 border border-amber-300 text-amber-900 p-4 rounded-3xl text-xs flex flex-col md:flex-row items-center justify-between gap-3 max-w-7xl mx-auto w-full mb-6">
+          <div className="flex items-center gap-2">
+            <AlertCircle size={15} className="text-amber-600 flex-shrink-0" />
+            <span className="text-left">
+              현재 <strong>GEMINI_API_KEY</strong> 환경 변수를 감지하지 못했습니다. AI 위탁 분석 결과를 도출하기 위해서는 우측 상단의 <strong>Settings &gt; Secrets</strong>에서 등록하시거나 아래 직접 입력을 사용하십시오.
+            </span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            <button
+              onClick={() => {
+                const el = document.getElementById("api-key-registry-section");
+                if (el) {
+                  el.scrollIntoView({ behavior: "smooth", block: "center" });
+                  el.classList.add("ring-4", "ring-indigo-500/30");
+                  setTimeout(() => el.classList.remove("ring-4", "ring-indigo-500/30"), 1500);
+                } else {
+                  setViewMode("LANDING");
+                  setTimeout(() => {
+                    const el2 = document.getElementById("api-key-registry-section");
+                    el2?.scrollIntoView({ behavior: "smooth", block: "center" });
+                  }, 100);
+                }
+              }}
+              className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-3 py-1.5 rounded-xl cursor-pointer transition-colors text-[11px] whitespace-nowrap"
+            >
+              🔑 키 직접 입력하러 가기
+            </button>
+            <button
+              onClick={() => {
+                fetch("/api/status")
+                  .then((res) => res.json())
+                  .then((data) => {
+                    const localKey = localStorage.getItem("KOE_CUSTOM_GEMINI_KEY");
+                    const activeHasKey = data.hasApiKey || !!localKey;
+                    setDiagnostics({
+                      checked: true,
+                      hasApiKey: activeHasKey,
+                      message: activeHasKey 
+                        ? "API Key가 설정되어 초기 시스템 작동 준비를 마쳤습니다." 
+                        : "GEMINI_API_KEY가 누락되었습니다. 화면 하단 입력창에서 검증 후 등록해 주세요."
+                    });
+                    if (activeHasKey) {
+                      setBackendError(null);
+                      alert("서버 연결 상태 갱신 성공: API Key가 성공적으로 주입되었습니다!");
+                    } else {
+                      alert("서버 연결 상태 갱신 결과: 아직 서버에 GEMINI_API_KEY가 감지되지 않았습니다. 우측 상단 Settings > Secrets 확인 후 새로고침해 주세요.");
+                    }
+                  })
+                  .catch(() => {
+                    alert("서버 연결에 실패했습니다. 새로고침 후 다시 시도해 주십시오.");
+                  });
+              }}
+              className="bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 font-bold px-3 py-1.5 rounded-xl cursor-pointer transition-colors text-[11px] whitespace-nowrap"
+            >
+              🔄 연결 상태 재검사
+            </button>
+            <button
+              onClick={() => {
+                setViewMode("WORKSPACE");
+              }}
+              className="bg-slate-800 hover:bg-slate-900 text-white font-bold px-3 py-1.5 rounded-xl cursor-pointer transition-colors text-[11px] whitespace-nowrap"
+            >
+              임의 진입하기 ⚡
+            </button>
+          </div>
         </div>
       )}
 
