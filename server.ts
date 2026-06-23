@@ -46,6 +46,54 @@ function getGeminiClient(customKey?: string): GoogleGenAI {
   return client;
 }
 
+// Robust fallback wrapper for generating content across multiple Google Gemini models
+async function generateContentWithFallback(
+  ai: GoogleGenAI,
+  options: {
+    contents: string | any[];
+    config?: any;
+  }
+) {
+  // Ordered candidate list from preferred to highly-available fallback options.
+  const models = [
+    "gemini-3.5-flash",
+    "gemini-flash-latest",
+    "gemini-3.1-flash-lite"
+  ];
+
+  let lastError: any = null;
+
+  for (const modelName of models) {
+    try {
+      console.log(`[Gemini Fallback Engine] Attempting model: ${modelName}`);
+      const response = await ai.models.generateContent({
+        model: modelName,
+        contents: options.contents,
+        config: options.config,
+      });
+      console.log(`[Gemini Fallback Engine] Success with model: ${modelName}`);
+      return response;
+    } catch (err: any) {
+      const errMsg = (err.message || "").toUpperCase();
+      console.warn(`[Gemini Fallback Engine] Model ${modelName} failed. Error:`, err.message || err);
+      
+      lastError = err;
+
+      // Fast-fail if the key is explicitly invalid to prevent wasteful retries
+      if (
+        errMsg.includes("API_KEY_INVALID") || 
+        errMsg.includes("INVALID_ARGUMENT") || 
+        errMsg.includes("API KEY NOT VALID") ||
+        errMsg.includes("KEY_INVALID")
+      ) {
+        throw err;
+      }
+    }
+  }
+
+  throw lastError || new Error("All candidate models failed to produce content.");
+}
+
 // 1. Health & Config Status Endpoint
 app.get("/api/status", (req, res) => {
   const hasApiKey = !!process.env.GEMINI_API_KEY;
@@ -75,9 +123,8 @@ app.post("/api/verify-key", async (req, res) => {
       }
     });
 
-    // Make an execution test call to verify is valid key
-    const testRep = await testGen.models.generateContent({
-      model: "gemini-3.5-flash",
+    // Make an execution test call to verify is valid key using fallback models
+    const testRep = await generateContentWithFallback(testGen, {
       contents: "Confirm key",
     });
 
@@ -361,8 +408,7 @@ app.post("/api/counsel", async (req, res) => {
       `;
     }
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+    const response = await generateContentWithFallback(ai, {
       contents: textPrompt,
       config: {
         systemInstruction: SYSTEM_INSTRUCTION,
