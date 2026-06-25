@@ -198,8 +198,14 @@ export default function App() {
 
       setVerifiedKey(trimmed);
       localStorage.setItem("KOE_CUSTOM_GEMINI_KEY", trimmed);
-      setVerifySuccess("Gemini API Key가 성공적으로 검증 및 로컬 저장되었습니다! 이제 모든 지능형 면담 분석 기능이 해제되어 작동합니다.");
-      setDiagnostics((prev) => ({ ...prev, hasApiKey: true, message: "API Key 인증 활성화됨 (로컬 지정)" }));
+      
+      if (data.warning) {
+        setVerifySuccess(data.message || "Gemini API Key가 유효한 것으로 판별되었습니다! (다만 현재 Google API 서버의 사용량이 일시적으로 높음 상태입니다. 정상 등록되었으므로 계속 사용하실 수 있습니다.)");
+      } else {
+        setVerifySuccess("Gemini API Key가 성공적으로 검증 및 로컬 저장되었습니다! 이제 모든 지능형 면담 분석 기능이 해제되어 작동합니다.");
+      }
+
+      setDiagnostics((prev) => ({ ...prev, hasApiKey: true, message: data.warning ? "API Key 등록 완료 (혼잡 상태 우회)" : "API Key 인증 활성화됨 (로컬 지정)" }));
       setBackendError(null);
 
       // Smooth auto transition

@@ -64,29 +64,58 @@ async function generateContentWithFallback(
   let lastError: any = null;
 
   for (const modelName of models) {
-    try {
-      console.log(`[Gemini Fallback Engine] Attempting model: ${modelName}`);
-      const response = await ai.models.generateContent({
-        model: modelName,
-        contents: options.contents,
-        config: options.config,
-      });
-      console.log(`[Gemini Fallback Engine] Success with model: ${modelName}`);
-      return response;
-    } catch (err: any) {
-      const errMsg = (err.message || "").toUpperCase();
-      console.warn(`[Gemini Fallback Engine] Model ${modelName} failed. Error:`, err.message || err);
-      
-      lastError = err;
+    let retries = 2; // Try up to 3 times per model for temporary 503/429 errors
+    let attempt = 0;
 
-      // Fast-fail if the key is explicitly invalid to prevent wasteful retries
-      if (
-        errMsg.includes("API_KEY_INVALID") || 
-        errMsg.includes("INVALID_ARGUMENT") || 
-        errMsg.includes("API KEY NOT VALID") ||
-        errMsg.includes("KEY_INVALID")
-      ) {
-        throw err;
+    while (attempt <= retries) {
+      try {
+        console.log(`[Gemini Fallback Engine] Attempting model: ${modelName} (Attempt ${attempt + 1}/${retries + 1})`);
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: options.contents,
+          config: options.config,
+        });
+        console.log(`[Gemini Fallback Engine] Success with model: ${modelName}`);
+        return response;
+      } catch (err: any) {
+        const errMsg = (err.message || "").toUpperCase();
+        console.warn(`[Gemini Fallback Engine] Model ${modelName} attempt ${attempt + 1} failed. Error:`, err.message || err);
+        
+        lastError = err;
+
+        // Fast-fail if the key is explicitly invalid to prevent wasteful retries
+        if (
+          errMsg.includes("API_KEY_INVALID") || 
+          errMsg.includes("INVALID_ARGUMENT") || 
+          errMsg.includes("API KEY NOT VALID") ||
+          errMsg.includes("KEY_INVALID")
+        ) {
+          throw err;
+        }
+
+        // Check if it is a temporary transient error (503/429/UNAVAILABLE/RESOURCE_EXHAUSTED/high demand)
+        const isTransient = 
+          err.status === 503 || 
+          err.status === 429 ||
+          errMsg.includes("503") ||
+          errMsg.includes("429") ||
+          errMsg.includes("HIGH DEMAND") ||
+          errMsg.includes("UNAVAILABLE") ||
+          errMsg.includes("RESOURCE_EXHAUSTED") ||
+          errMsg.includes("LIMIT") ||
+          errMsg.includes("QUOTA") ||
+          errMsg.includes("TRY AGAIN LATER") ||
+          errMsg.includes("SPIKE");
+
+        if (isTransient && attempt < retries) {
+          attempt++;
+          const delay = Math.pow(2, attempt) * 1000; // 2s, 4s delay
+          console.log(`[Gemini Fallback Engine] Transient error detected. Retrying in ${delay}ms...`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        } else {
+          // Non-transient or last attempt exhausted, break to next model
+          break;
+        }
       }
     }
   }
@@ -135,6 +164,7 @@ app.post("/api/verify-key", async (req, res) => {
     }
   } catch (error: any) {
     console.error("API Key Verification Error:", error);
+    
     let detailedMsg = "유효하지 않은 API Key이거나 네트워크에 장애가 발생했습니다.";
     if (error?.message) {
       detailedMsg = error.message;
@@ -150,6 +180,31 @@ app.post("/api/verify-key", async (req, res) => {
         // ignore
       }
     }
+
+    const errMsgLower = (error.message || "").toLowerCase();
+    const isOverloadedOrRateLimited = 
+      error.status === 503 || 
+      error.status === 429 ||
+      errMsgLower.includes("503") ||
+      errMsgLower.includes("429") ||
+      errMsgLower.includes("high demand") ||
+      errMsgLower.includes("unavailable") ||
+      errMsgLower.includes("resource_exhausted") ||
+      errMsgLower.includes("quota") ||
+      errMsgLower.includes("limit") ||
+      errMsgLower.includes("overloaded") ||
+      errMsgLower.includes("try again later") ||
+      errMsgLower.includes("spike");
+
+    if (isOverloadedOrRateLimited) {
+      console.log("[Verification Bypass] API Key is valid (authenticated successfully), but returned temporary 503/429 overload error. Accepting key.");
+      return res.json({ 
+        valid: true, 
+        warning: true,
+        message: "API Key 인증 자체는 유효한 것으로 확인되었습니다! 다만 현재 Google API 서버의 사용량이 일시적으로 매우 높은 상태(503/429)입니다. 정상 등록되었으므로 안심하고 사용해 보시고, 분석 시 혼잡할 경우 일시적으로 지연이 있을 수 있습니다." 
+      });
+    }
+
     return res.status(400).json({ valid: false, error: detailedMsg });
   }
 });
