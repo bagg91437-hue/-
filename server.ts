@@ -63,60 +63,57 @@ async function generateContentWithFallback(
 
   let lastError: any = null;
 
+  // First Pass: Attempt each model once. Fallback IMMEDIATELY if any transient error occurs.
+  // This avoids keeping the user waiting for seconds on an overloaded server.
   for (const modelName of models) {
-    let retries = 2; // Try up to 3 times per model for temporary 503/429 errors
-    let attempt = 0;
+    try {
+      console.log(`[Gemini Fallback Engine] [Pass 1] Attempting model: ${modelName}`);
+      const response = await ai.models.generateContent({
+        model: modelName,
+        contents: options.contents,
+        config: options.config,
+      });
+      console.log(`[Gemini Fallback Engine] [Pass 1] Success with model: ${modelName}`);
+      return response;
+    } catch (err: any) {
+      const errMsg = (err.message || "").toUpperCase();
+      console.warn(`[Gemini Fallback Engine] [Pass 1] Model ${modelName} failed. Error:`, err.message || err);
+      
+      lastError = err;
 
-    while (attempt <= retries) {
-      try {
-        console.log(`[Gemini Fallback Engine] Attempting model: ${modelName} (Attempt ${attempt + 1}/${retries + 1})`);
-        const response = await ai.models.generateContent({
-          model: modelName,
-          contents: options.contents,
-          config: options.config,
-        });
-        console.log(`[Gemini Fallback Engine] Success with model: ${modelName}`);
-        return response;
-      } catch (err: any) {
-        const errMsg = (err.message || "").toUpperCase();
-        console.warn(`[Gemini Fallback Engine] Model ${modelName} attempt ${attempt + 1} failed. Error:`, err.message || err);
-        
-        lastError = err;
-
-        // Fast-fail if the key is explicitly invalid to prevent wasteful retries
-        if (
-          errMsg.includes("API_KEY_INVALID") || 
-          errMsg.includes("INVALID_ARGUMENT") || 
-          errMsg.includes("API KEY NOT VALID") ||
-          errMsg.includes("KEY_INVALID")
-        ) {
-          throw err;
-        }
-
-        // Check if it is a temporary transient error (503/429/UNAVAILABLE/RESOURCE_EXHAUSTED/high demand)
-        const isTransient = 
-          err.status === 503 || 
-          err.status === 429 ||
-          errMsg.includes("503") ||
-          errMsg.includes("429") ||
-          errMsg.includes("HIGH DEMAND") ||
-          errMsg.includes("UNAVAILABLE") ||
-          errMsg.includes("RESOURCE_EXHAUSTED") ||
-          errMsg.includes("LIMIT") ||
-          errMsg.includes("QUOTA") ||
-          errMsg.includes("TRY AGAIN LATER") ||
-          errMsg.includes("SPIKE");
-
-        if (isTransient && attempt < retries) {
-          attempt++;
-          const delay = Math.pow(2, attempt) * 1000; // 2s, 4s delay
-          console.log(`[Gemini Fallback Engine] Transient error detected. Retrying in ${delay}ms...`);
-          await new Promise((resolve) => setTimeout(resolve, delay));
-        } else {
-          // Non-transient or last attempt exhausted, break to next model
-          break;
-        }
+      // Fast-fail if the key is explicitly invalid to prevent wasteful retries
+      if (
+        errMsg.includes("API_KEY_INVALID") || 
+        errMsg.includes("INVALID_ARGUMENT") || 
+        errMsg.includes("API KEY NOT VALID") ||
+        errMsg.includes("KEY_INVALID")
+      ) {
+        throw err;
       }
+
+      console.log(`[Gemini Fallback Engine] Model ${modelName} is busy or returned transient error. Falling back immediately to the next available model...`);
+    }
+  }
+
+  // Second Pass: If all models failed on the first pass, run a secondary cycle with a small delay
+  console.warn("[Gemini Fallback Engine] All models failed on first pass. Initiating active secondary pass with exponential fallback...");
+  
+  for (const modelName of models) {
+    try {
+      // Small delay of 1.5s before retrying to let spike subside
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      console.log(`[Gemini Fallback Engine] [Pass 2] Re-attempting model: ${modelName}`);
+      
+      const response = await ai.models.generateContent({
+        model: modelName,
+        contents: options.contents,
+        config: options.config,
+      });
+      console.log(`[Gemini Fallback Engine] [Pass 2] Success with model: ${modelName}`);
+      return response;
+    } catch (err: any) {
+      console.warn(`[Gemini Fallback Engine] [Pass 2] Model ${modelName} failed. Error:`, err.message || err);
+      lastError = err;
     }
   }
 
