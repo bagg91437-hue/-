@@ -24,7 +24,7 @@ let aiClient: GoogleGenAI | null = null;
 function getGeminiClient(customKey?: string): GoogleGenAI {
   const apiKey = customKey || process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error("GEMINI_API_KEY가 설정되지 않았습니다. AI Studio 우측 상단의 Settings > Secrets 메뉴에서 GEMINI_API_KEY를 등록하거나, 화면에 유효한 API Key를 직접 입력해 주세요.");
+    throw new Error("GEMINI_API_KEY가 서버 환경 변수에 설정되지 않았습니다. 개발 환경인 경우 AI Studio 우측 상단의 Settings > Secrets에서 등록하시거나, Vercel 등 배포 환경에서는 환경 변수에 주입하고, 임시 사용 시 화면 하단의 '키 직접 입력'을 사용해 주십시오.");
   }
   
   if (!customKey && aiClient) {

@@ -118,6 +118,9 @@ export default function App() {
   const [copiedStates, setCopiedStates] = useState<Record<string, boolean>>({});
   const [interactiveChecklist, setInteractiveChecklist] = useState<Record<string, boolean>>({});
   const [diagnostics, setDiagnostics] = useState({ checked: false, hasApiKey: true, message: "" });
+  const [hideKeyBanner, setHideKeyBanner] = useState(() => {
+    return localStorage.getItem("KOE_HIDE_KEY_BANNER") === "true";
+  });
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [activePresetId, setActivePresetId] = useState<string | null>(null);
 
@@ -1070,12 +1073,21 @@ export default function App() {
       </header>
 
       {/* 2. Top Banner alert for missing API keys */}
-      {!diagnostics.hasApiKey && (
+      {!diagnostics.hasApiKey && !hideKeyBanner && (
         <div className="no-print bg-amber-500/10 border border-amber-300 text-amber-900 p-4 rounded-3xl text-xs flex flex-col md:flex-row items-center justify-between gap-3 max-w-7xl mx-auto w-full mb-6">
           <div className="flex items-center gap-2">
             <AlertCircle size={15} className="text-amber-600 flex-shrink-0" />
             <span className="text-left">
-              현재 <strong>GEMINI_API_KEY</strong> 환경 변수를 감지하지 못했습니다. AI 위탁 분석 결과를 도출하기 위해서는 우측 상단의 <strong>Settings &gt; Secrets</strong>에서 등록하시거나 아래 직접 입력을 사용하십시오.
+              {typeof window !== "undefined" && 
+              (!window.location.hostname.includes("run.app") && !window.location.hostname.includes("aistudio") && !window.location.hostname.includes("localhost")) ? (
+                <>
+                  현재 서버 환경에 <strong>GEMINI_API_KEY</strong> 환경 변수가 감지되지 않았습니다. Vercel 등 호스팅 대시보드 환경 변수에 <code>GEMINI_API_KEY</code>를 추가하시거나, 아래 <strong>키 직접 입력</strong>을 사용하십시오.
+                </>
+              ) : (
+                <>
+                  현재 <strong>GEMINI_API_KEY</strong> 환경 변수를 감지하지 못했습니다. AI 위탁 분석 결과를 도출하기 위해서는 우측 상단의 <strong>Settings &gt; Secrets</strong>에서 등록하시거나 아래 직접 입력을 사용하십시오.
+                </>
+              )}
             </span>
           </div>
           <div className="flex items-center gap-2 flex-wrap justify-end">
@@ -1116,7 +1128,13 @@ export default function App() {
                       setBackendError(null);
                       alert("서버 연결 상태 갱신 성공: API Key가 성공적으로 주입되었습니다!");
                     } else {
-                      alert("서버 연결 상태 갱신 결과: 아직 서버에 GEMINI_API_KEY가 감지되지 않았습니다. 우측 상단 Settings > Secrets 확인 후 새로고침해 주세요.");
+                      const isVercel = typeof window !== "undefined" && 
+                        (!window.location.hostname.includes("run.app") && !window.location.hostname.includes("aistudio") && !window.location.hostname.includes("localhost"));
+                      if (isVercel) {
+                        alert("서버 연결 상태 갱신 결과: 아직 서버 환경 변수에 GEMINI_API_KEY가 감지되지 않았습니다. Vercel 환경 변수 설정을 확인해 주시거나 아래 입력창을 활용해 주십시오.");
+                      } else {
+                        alert("서버 연결 상태 갱신 결과: 아직 서버에 GEMINI_API_KEY가 감지되지 않았습니다. 우측 상단 Settings > Secrets 확인 후 새로고침해 주세요.");
+                      }
                     }
                   })
                   .catch(() => {
@@ -1134,6 +1152,16 @@ export default function App() {
               className="bg-slate-800 hover:bg-slate-900 text-white font-bold px-3 py-1.5 rounded-xl cursor-pointer transition-colors text-[11px] whitespace-nowrap"
             >
               임의 진입하기 ⚡
+            </button>
+            <button
+              onClick={() => {
+                setHideKeyBanner(true);
+                localStorage.setItem("KOE_HIDE_KEY_BANNER", "true");
+              }}
+              className="bg-amber-200 hover:bg-amber-300 text-amber-900 border border-amber-400 font-bold px-3 py-1.5 rounded-xl cursor-pointer transition-colors text-[11px] whitespace-nowrap"
+              title="배너 다시 보지 않기"
+            >
+              닫기 ✕
             </button>
           </div>
         </div>
